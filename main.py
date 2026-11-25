@@ -1,4 +1,4 @@
-"""Pigeon Pitch, One Line — elevator pitch from a city pigeon to investors."""
+"""Pigeon Pitch, One Line — a city pigeon's elevator pitch to investors."""
 
 import os
 
@@ -9,30 +9,58 @@ PITCH = (
 )
 
 
-def resolve_entry_path():
-    """Return the file path where the entry text must be written."""
-    target = os.environ.get("ENTRY_OUT")
-    if not target:
-        return os.path.join(os.getcwd(), "entry.txt")
-    if os.path.isdir(target):
-        return os.path.join(target, "entry.txt")
-    return target
+def resolve_entry_targets():
+    """Resolve output targets in priority order.
+
+    ENTRY_OUT wins, then MAKEFUN_OUTPUT_DIR, then /output/entry.txt,
+    with the working directory as the last resort. A value naming a
+    directory means entry.txt inside it; a value naming a file is used
+    as-is.
+    """
+    resolved = []
+    for name in ("ENTRY_OUT", "MAKEFUN_OUTPUT_DIR"):
+        raw = os.environ.get(name)
+        if not raw:
+            continue
+        if os.path.isdir(raw):
+            resolved.append(os.path.join(raw, "entry.txt"))
+        else:
+            resolved.append(raw)
+    resolved.append("/output/entry.txt")
+    resolved.append(os.path.join(os.getcwd(), "entry.txt"))
+    return resolved
 
 
-def check_pitch_length(text, ceiling=200):
+def validate_pitch_line(text, ceiling=200):
     """Ensure the pitch stays a single line within the character ceiling."""
-    stripped = text.strip()
-    assert "\n" not in stripped, "pitch must be a single line"
-    assert len(stripped) <= ceiling, f"pitch is {len(stripped)} chars, over {ceiling}"
-    return stripped
+    cleaned = text.strip()
+    assert "\n" not in cleaned, "pitch must be a single line"
+    assert len(cleaned) <= ceiling, f"pitch is {len(cleaned)} chars, over {ceiling}"
+    return cleaned
+
+
+def write_entry_file(target_path, pitch_text):
+    """Write the pitch to one target; return the OSError, or None."""
+    parent = os.path.dirname(target_path)
+    try:
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as handle:
+            handle.write(pitch_text + "\n")
+    except OSError as exc:
+        return exc
+    return None
 
 
 def main():
-    checked_pitch = check_pitch_length(PITCH)
-    entry_path = resolve_entry_path()
-    with open(entry_path, "w", encoding="utf-8") as handle:
-        handle.write(checked_pitch + "\n")
-    print(checked_pitch)
+    pitch_text = validate_pitch_line(PITCH)
+    last_error = None
+    for target_path in resolve_entry_targets():
+        last_error = write_entry_file(target_path, pitch_text)
+        if last_error is None:
+            print(pitch_text)
+            return
+    raise last_error
 
 
 if __name__ == "__main__":
